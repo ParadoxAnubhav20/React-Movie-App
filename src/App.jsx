@@ -14,6 +14,8 @@ import {
   List,
   PlusCircle,
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const API_BASE_URL = "https://api.themoviedb.org/3";
@@ -50,10 +52,14 @@ const App = () => {
   const [activeGenre, setActiveGenre] = useState(null);
   const [sortBy, setSortBy] = useState("popularity.desc");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [bookmarkedMovies, setBookmarkedMovies] = useState([]);
+  const [bookmarkedMovies, setBookmarkedMovies] = useState(() => {
+    const savedBookmarks = localStorage.getItem("bookmarkedMovies");
+    return savedBookmarks ? JSON.parse(savedBookmarks) : [];
+  });
   const [showBookmarked, setShowBookmarked] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
+  const [trendingScrollPosition, setTrendingScrollPosition] = useState(0);
 
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm]);
 
@@ -151,11 +157,18 @@ const App = () => {
   };
 
   const toggleBookmark = (movieId) => {
-    if (bookmarkedMovies.includes(movieId)) {
-      setBookmarkedMovies(bookmarkedMovies.filter((id) => id !== movieId));
-    } else {
-      setBookmarkedMovies([...bookmarkedMovies, movieId]);
-    }
+    setBookmarkedMovies((prevBookmarks) => {
+      const updatedBookmarks = prevBookmarks.includes(movieId)
+        ? prevBookmarks.filter((id) => id !== movieId)
+        : [...prevBookmarks, movieId];
+
+      // Save to localStorage
+      localStorage.setItem(
+        "bookmarkedMovies",
+        JSON.stringify(updatedBookmarks)
+      );
+      return updatedBookmarks;
+    });
   };
 
   const handleGenreFilter = (genreId) => {
@@ -176,6 +189,23 @@ const App = () => {
     }
   };
 
+  const scrollTrending = (direction) => {
+    const container = document.getElementById("trending-container");
+    if (container) {
+      const scrollAmount = container.clientWidth * 0.75;
+      const newPosition =
+        direction === "left"
+          ? Math.max(0, trendingScrollPosition - scrollAmount)
+          : trendingScrollPosition + scrollAmount;
+
+      container.scrollTo({
+        left: newPosition,
+        behavior: "smooth",
+      });
+      setTrendingScrollPosition(newPosition);
+    }
+  };
+
   useEffect(() => {
     setPage(1);
     fetchMovies(debouncedSearchTerm);
@@ -184,6 +214,10 @@ const App = () => {
   useEffect(() => {
     loadTrendingMovies();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("bookmarkedMovies", JSON.stringify(bookmarkedMovies));
+  }, [bookmarkedMovies]);
 
   const displayedMovies = showBookmarked
     ? movieList.filter((movie) => bookmarkedMovies.includes(movie.id))
@@ -217,27 +251,68 @@ const App = () => {
           <Search searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </header>
 
+        {/* Improved Trending movies section */}
         {trendingMovies.length > 0 &&
           !showBookmarked &&
           !debouncedSearchTerm && (
-            <section className="trending">
-              <h2 className="flex items-center gap-2">
-                <TrendingUp size={24} className="text-light-100" />
-                Trending Movies
-              </h2>
+            <section className="trending mt-10 mb-12">
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="flex items-center gap-2">
+                  <TrendingUp size={24} className="text-light-100" />
+                  Trending Movies
+                </h2>
 
-              <ul>
-                {trendingMovies.map((movie, index) => (
-                  <li
-                    key={movie.$id}
-                    onClick={() => handleSelectTrendingMovie(movie.movie_id)}
-                    className="cursor-pointer hover:scale-105 transition-transform"
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => scrollTrending("left")}
+                    className="p-1.5 rounded-full bg-dark-100 hover:bg-light-100/20"
+                    aria-label="Scroll left"
                   >
-                    <p>{index + 1}</p>
-                    <img src={movie.poster_url} alt={movie.title} />
-                  </li>
-                ))}
-              </ul>
+                    <ChevronLeft size={20} className="text-white" />
+                  </button>
+                  <button
+                    onClick={() => scrollTrending("right")}
+                    className="p-1.5 rounded-full bg-dark-100 hover:bg-light-100/20"
+                    aria-label="Scroll right"
+                  >
+                    <ChevronRight size={20} className="text-white" />
+                  </button>
+                </div>
+              </div>
+
+              <div
+                id="trending-container"
+                className="relative overflow-x-auto hide-scrollbar rounded-lg"
+              >
+                <ul className="flex gap-4 min-w-max pb-2">
+                  {trendingMovies.map((movie, index) => (
+                    <li
+                      key={movie.$id}
+                      onClick={() => handleSelectTrendingMovie(movie.movie_id)}
+                      className="cursor-pointer hover:scale-105 transition-transform"
+                    >
+                      <div className="relative group">
+                        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-transparent to-black/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-end justify-center">
+                          <p className="text-white text-sm font-medium px-2 pb-2 text-center truncate max-w-full">
+                            {movie.title}
+                          </p>
+                        </div>
+                        <div className="absolute top-2 left-2 bg-black/70 rounded-full w-6 h-6 flex items-center justify-center">
+                          <span className="text-white text-xs font-bold">
+                            {index + 1}
+                          </span>
+                        </div>
+                        <img
+                          src={movie.poster_url}
+                          alt={movie.title}
+                          className="w-32 h-48 object-cover rounded-lg shadow-md"
+                          loading="lazy"
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </section>
           )}
 
